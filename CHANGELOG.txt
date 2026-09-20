@@ -4,149 +4,60 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
-2026-09-01 — Version 6.0.0a8
+2026-09-20 — Version 6.0.0
 
-Root-cause fix + diagnostics for the stubborn stuck/missing-note
-class: the kernel's per-client MIDI event FIFO (200 events by
-default) silently drops queued events when the event loop is too slow
-to drain — and then wipes the whole pending queue. The hub now runs
-every client at the kernel ceiling and counts every overflow episode.
+The first stable release since 5.2.0, collecting the whole alpha
+cycle (6.0.0a1–a8). Headlines: the hub speaks **MIDI 2.0** — full 32-bit
+controller resolution flows end to end, MIDI 2.0 devices are modelled
+from their UMP endpoint descriptions, and MIDI-CI asks connected gear
+who it is — **RaspiMIDIHub runs on any computer now**, and the
+stubborn stuck/missing-note class got its root-cause fix: the kernel's
+per-client MIDI event FIFO (200 events by default) silently drops
+queued events when the event loop is too slow to drain, and then wipes
+the whole pending queue; the hub now runs every client at the kernel
+ceiling and counts every overflow episode.
 
-- Fix (internal): the hub's ALSA clients (main client + every plugin client) run their kernel input FIFO at the 2000-event ceiling instead of the 200-event default — a 1.2 s loop stall at busy-play rates overflows the default FIFO, in which the kernel drops events AND clears the pending queue on the next read (a dropped note-off = a stuck note at the destination; a dropped note-on = a missing note). Verified on the Pi: the same 1.2 s stall at 250 ev/s drops 200 note-ons on the 200-event FIFO and zero on the 2000-event one
-- Added (internal): overflow visibility — every -ENOSPC input-FIFO overflow episode is counted and logged (notes may be missing or stuck), and `GET /api/observatory` now carries an `alsa` field: the FIFO's configured size, live free space, and the overflow count; a rising count during a performance is the signature of kernel-dropped MIDI events
-- Added: `POST /api/debug/midi-activity` (`{"unthrottled": true|false}`) lifts the MIDI monitor's 10 events/sec per-port cap so the monitor shows every event (whole chords, fast note-off bursts) — debugging aid, off after reboot
-- Added (internal): event-loop stall forensics — a watchdog thread fingerprints every loop lag above 100 ms (the loop's frozen frame + kernel wait channel, and the thread that burned the GIL during the window) so the remaining ~1 s loop stalls can be attributed to their cause; `GET /api/debug/stalls` returns the newest episodes, each is also warn-logged to journald
-- Fix (internal): the `ip` subprocesses of `GET /api/system` run on a worker thread instead of forking on the loop (fork/exec/wait on the loop thread occupied it 10-150 ms per interface under load; the syscalls release the GIL, so a worker thread genuinely frees the loop here)
-- Fix: config export / backup download started nothing on iOS — the PWA service worker re-served the download navigation via respondWith(), which breaks Content-Disposition: attachment handling in mobile Safari; /api/ requests now bypass the worker entirely
-- Changed: the Sys Info RAM stat is now labeled "(free / total)" so its two MB values read unambiguously
-
-
-2026-08-28 — Version 6.0.0a7
-
-One fix, for anyone performing on the Euclidean or Arpeggiator play
-surfaces: a saved set no longer resets to the factory defaults after
-a reboot or Load.
-
-- Fix: **Euclidean / Arpeggiator settings reset to defaults after a reboot or Load.** When the active pattern slot wasn't the first one, restoring a saved config replayed the parameters in save order — the slot selection landed before the 8-slot pattern bank, so switching to it loaded the still-factory-default bank and wrote the whole play surface (Root / Scale, Steps, Pulses, the step grid, …) back to its out-of-the-box values (C major, 4 pulses). The restore now writes the saved values in full before triggering any parameter side effects, so the surface comes back exactly as it was saved; the 8 slots themselves were always stored correctly, which is why tapping the slot back brought the settings up again
-
-
-2026-08-28 — Version 6.0.0a6
-
-One new measurement, for watching the appliance's read-only
-protection: the Settings → Sys Info page now shows the root
-filesystem's live state.
-
-- Added: Settings → Sys Info now shows the root filesystem's live state (`readonly` / `read/write`) — the root is remounted read/write only for the brief window of a write operation, so a `read/write` that persists while idle makes a failed read-only remount visible at a glance (highlighted amber)
-
-
-2026-08-28 — Version 6.0.0a5
-
-Maintenance release — no user-visible behaviour changes. The REST API
-layer moved out of one 2500-line function into per-domain modules, the
-event-loop plumbing uses Python 3.12's explicit running-loop API, and
-failed update installs now leave a reason in the hub log.
-
+- Added: **MIDI 2.0 groundwork** — the hub detects at startup whether the kernel and ALSA support UMP/MIDI 2.0 and reports it in /api/system (all current Raspberry Pi OS kernels: not yet); on kernels without MIDI 2.0 support the hub runs the untouched legacy code paths, so MIDI 1.0 behaviour is byte-identical and the hub works as it always did
+- Added: **MIDI 2.0 devices are modelled from their UMP endpoint description** — named function blocks become the device's ports in the matrix; /api/devices carries the capability info
+- Added: **per-device "force MIDI 1.0" escape hatch** (config midi2.force_midi1 + device action API) for devices that misbehave under MIDI 2.0
+- Added: **the MIDI monitor shows MIDI 2.0 sources at full resolution** — fractional 0-127 values (vel=100.53) and typed RPN/NRPN/Per-Note rows; MIDI 1.0 devices display unchanged
+- Added: **"2.0" badge on MIDI 2.0-capable devices** (matrix row headers + rack faceplates) and a MIDI 2.0 card in device detail with endpoint info and a Use-MIDI-2.0 toggle
+- Added: **filtered/mapped connections carry full MIDI 2.0 resolution end-to-end** (32-bit values through filters and mappings; MIDI 1.0 devices see byte-identical values as before)
+- Added: **"MIDI 2.0" message-type filter toggle** (gates per-note messages); mapping value fields accept fractional values like 63.5
+- Added: **plugin CC automation follows MIDI 2.0 controllers at full 32-bit resolution**; new "fine" parameters hold fractional values (CC LFO Depth/Center first)
+- Added: **CC LFO emits its waveform at full 32-bit resolution** to MIDI 2.0 destinations (stepless sweeps); MIDI 1.0 destinations receive the identical stepped values as before
+- Added: **CC Smoother, Velocity Curve, Velocity Equalizer and Pitch CC handle MIDI 2.0 resolution end to end** (stepless glides, interpolated curves, preserved velocity gradations); MIDI 1.0 output stays byte-identical
+- Added: **the hub's own plugins count as hi-res sources in the MIDI monitor** — a CC LFO sweep displays fractionally (51.61) instead of as integer steps
+- Added: **MIDI-CI discovery** — the hub asks connected devices who they are (manufacturer/model/version + capabilities, incl. Property-Exchange friendly names) and shows it in device detail; works over MIDI 1.0/DIN links too; Identify button + midi2.ci_enabled/ci_disabled opt-outs
+- Added: **scripts/fake_midi2_synth.py** — a virtual MIDI 2.0 device for testing every 2.0 feature without 2.0 hardware
+- Added: **runs on any computer now, not just a Raspberry Pi** — plug a USB MIDI device into the machine and it shows up in the matrix and routes exactly as on the appliance; off-appliance the config lives under RASPIMIDIHUB_STATE_DIR and the web port is set by RASPIMIDIHUB_PORT (the appliance itself is unchanged)
+- Added: **no-hardware local trial** — `make demo` runs the full web UI against virtual MIDI ports (snd-virmidi), so routing, plugins and trackers can be explored without a Pi or any gear
+- Added: **Settings → Sys Info now shows the root filesystem's live state** (`readonly` / `read/write`) — the root is remounted read/write only for the brief window of a write operation, so a `read/write` that persists while idle makes a failed read-only remount visible at a glance (highlighted amber)
+- Added: **`POST /api/debug/midi-activity`** (`{"unthrottled": true|false}`) lifts the MIDI monitor's 10 events/sec per-port cap so the monitor shows every event (whole chords, fast note-off bursts) — debugging aid, off after reboot
+- Added (internal): **overflow visibility** — every -ENOSPC input-FIFO overflow episode is counted and logged (notes may be missing or stuck), and `GET /api/observatory` now carries an `alsa` field: the FIFO's configured size, live free space, and the overflow count; a rising count during a performance is the signature of kernel-dropped MIDI events
+- Added (internal): **event-loop stall forensics** — a watchdog thread fingerprints every loop lag above 100 ms (the loop's frozen frame + kernel wait channel, and the thread that burned the GIL during the window) so the remaining ~1 s loop stalls can be attributed to their cause; `GET /api/debug/stalls` returns the newest episodes, each is also warn-logged to journald
 - Improved (internal): the REST API layer is split into per-domain modules; every endpoint, its summary, and the live /docs + /api/routes.json reference are unchanged
 - Improved (internal): the event-loop plumbing uses the explicit running-loop API (get_running_loop) instead of the deprecated implicit form
-- Improved: a failed update install — a bad or missing release .deb, or the read-only root-filesystem remount failing — now logs the reason (return code + output tail) instead of failing silently
-
-
-2026-08-10 — Version 6.0.0a4
-
-One fix, for anyone who performs with the Controller's drop buttons. A
-fade button ("riser") building into a hard drop on the same bars did not
-hand over cleanly: the drop landed on its bar line, and then the riser
-delivered its own target values on top of it a bar or two later — so the
-synth ended up where the rise had been heading, not where the drop put
-it. The riser now builds right up to the drop and then gets out of the
-way completely.
-
-- Fix: **a hard drop now really wins over a running riser.** With a fade
-  button building and a hard drop button queued on the same bars, the riser
-  still delivered its own target values *after* the drop landed, so the synth
-  played the rise's end state instead of the dropped one. A scheduled drop
-  lives both in the schedule and pre-queued in the ALSA output queue, and the
-  path that cancelled the riser only cleared the former — its queued CCs fired
-  anyway. The riser now keeps rising right up to the drop's bar line and then
-  gets out of the way completely, in either press order, whether the two share
-  a bar line or the riser was set to a later one. A drop in "Now" mode stops an
-  in-flight riser immediately.
-
-
-2026-07-25 — Version 6.0.0a3
-
-A fix for anyone running two instruments of the same model. Two M8s
-(or two of anything) were being treated as one device wearing two
-hats: they shared a single identity, and which physical unit answered
-to it changed from boot to boot — so a saved routing could quietly
-end up pointing at the other instrument. Each unit now keeps its own
-identity across reboots and replugs.
-
-- Fix: **two devices of the same model no longer swap identities.** With two
-  identical units plugged in (two M8s, two of any model), both were bound to
-  the *same* ALSA card, so they shared one serial: one device took the saved
-  identity, the other got a "#2" suffix — and which unit got which flipped on
-  every boot, so routing followed the wrong instrument. The hub now asks the
-  sequencer which card each device belongs to instead of guessing from the
-  model name, so each unit keeps its own serial-based identity across reboots
-  and replugs. Existing connections that reference a real serial keep working
-  untouched; a saved "#2" entry has no unit it can safely be matched to and
-  shows as pending until re-pointed once.
-- Fix: the per-port MIDI throughput event (`midi-rates`) was missing from the
-  SSE registry, so it was absent from the live API docs at /docs and warn-logged
-  on every emit.
-
-
-2026-07-13 — Version 6.0.0a2
-
-RaspiMIDIHub runs on any computer now, not just a Raspberry Pi. Plug
-a USB MIDI device into a laptop or desktop and it shows up in the
-routing matrix and routes exactly as it does on the appliance —
-handy for trying the hub, developing, or capturing documentation
-without hardware. The user manual was also reorganised and rewritten
-this cycle: 18 tighter chapters, ~30% shorter, every fact with one
-canonical home.
-
-- Added: runs on any computer now, not just a Raspberry Pi — plug a USB MIDI device into the machine and it shows up in the matrix and routes exactly as on the appliance; off-appliance the config lives under RASPIMIDIHUB_STATE_DIR and the web port is set by RASPIMIDIHUB_PORT (the appliance itself is unchanged)
-- Added: no-hardware local trial — `make demo` runs the full web UI against virtual MIDI ports (snd-virmidi), so routing, plugins and trackers can be explored without a Pi or any gear
-- Changed: the manual was reorganized from 22 to 18 chapters — architecture/config/tech-specs merged into one Technical Reference, UI controls folded into the Web UI chapter, Backup documented alongside Save/Load, and every fact given one canonical home; all cross-references renumbered and machine-validated
-- Improved: the user manual was rewritten in a tighter, more precise style — ~30% shorter with no user-facing facts removed (159-page PDF)
+- Improved: **a failed update install now leaves a reason in the hub log** — a bad or missing release .deb, or the read-only root-filesystem remount failing, logs the reason (return code + output tail) instead of failing silently
 - Improved: architecture diagram (figure 4.1) caught up with the software — Network MIDI source/exports, MIDI 2.0 (UMP) in the ALSA tier, the full persistence tiers (autosave ping-pong, rolling backups, boot preference), and the per-hub mDNS name
 - Improved: manual PDF no longer starts a section heading in the last centimetres of a page (orphaned-heading protection)
-- Fix: Appendix A stated wrong octave names for the play-surface trigger-note defaults (36..43 is C1..G1, not C2..G2)
-- Fix: manual stated wrong MIDI Learn windows (it's 10 s in the filter/mapping panel, 30 s in the CC-binding popups) and carried four stale section cross-references
+- Changed: the manual was reorganized from 22 to 18 chapters — architecture/config/tech-specs merged into one Technical Reference, UI controls folded into the Web UI chapter, Backup documented alongside Save/Load, and every fact given one canonical home; all cross-references renumbered and machine-validated
+- Changed: the user manual was rewritten in a tighter, more precise style — ~30% shorter with no user-facing facts removed (159-page PDF)
+- Changed: the Sys Info RAM stat is now labeled "(free / total)" so its two MB values read unambiguously
+- Fix: **the hub's ALSA clients (main client + every plugin client) run their kernel input FIFO at the 2000-event ceiling** instead of the 200-event default — a 1.2 s loop stall at busy-play rates overflows the default FIFO, in which the kernel drops events AND clears the pending queue on the next read (a dropped note-off = a stuck note at the destination; a dropped note-on = a missing note). Verified on the Pi: the same 1.2 s stall at 250 ev/s drops 200 note-ons on the 200-event FIFO and zero on the 2000-event one
+- Fix: **a hard drop now really wins over a running riser.** With a fade button building and a hard drop button queued on the same bars, the riser still delivered its own target values *after* the drop landed, so the synth played the rise's end state instead of the dropped one. A scheduled drop lives both in the schedule and pre-queued in the ALSA output queue, and the path that cancelled the riser only cleared the former — its queued CCs fired anyway. The riser now keeps rising right up to the drop's bar line and then gets out of the way completely, in either press order, whether the two share a bar line or the riser was set to a later one. A drop in "Now" mode stops an in-flight riser immediately
+- Fix: **two devices of the same model no longer swap identities.** With two identical units plugged in (two M8s, two of any model), both were bound to the *same* ALSA card, so they shared one serial: one device took the saved identity, the other got a "#2" suffix — and which unit got which flipped on every boot, so routing followed the wrong instrument. The hub now asks the sequencer which card each device belongs to instead of guessing from the model name, so each unit keeps its own serial-based identity across reboots and replugs. Existing connections that reference a real serial keep working untouched; a saved "#2" entry has no unit it can safely be matched to and shows as pending until re-pointed once
+- Fix: **Euclidean / Arpeggiator settings no longer reset to defaults after a reboot or Load.** When the active pattern slot wasn't the first one, restoring a saved config replayed the parameters in save order — the slot selection landed before the 8-slot pattern bank, so switching to it loaded the still-factory-default bank and wrote the whole play surface (Root / Scale, Steps, Pulses, the step grid, …) back to its out-of-the-box values (C major, 4 pulses). The restore now writes the saved values in full before triggering any parameter side effects, so the surface comes back exactly as it was saved
+- Fix: **config export / backup download started nothing on iOS** — the PWA service worker re-served the download navigation via respondWith(), which breaks Content-Disposition: attachment handling in mobile Safari; /api/ requests now bypass the worker entirely
+- Fix: **SysEx transmission was broken** (wrong ALSA variable-length flag since the beginning) — affected the SysEx Sender plugin; found and fixed by the MIDI-CI work
+- Fix: pitch bend over Network MIDI and Bluetooth MIDI was shifted by half its range (center played as minimum bend) — ALSA's signed convention was never converted to the unsigned wire form
+- Fix (internal): the `ip` subprocesses of `GET /api/system` run on a worker thread instead of forking on the loop (fork/exec/wait on the loop thread occupied it 10-150 ms per interface under load; the syscalls release the GIL, so a worker thread genuinely frees the loop here)
 - Fix: the cc_map_changed / cc_learn_result / cc_learn_timeout SSE events were missing from the /docs event registry (each emit warn-logged)
+- Fix: the per-port MIDI throughput event (`midi-rates`) was missing from the SSE registry, so it was absent from the live API docs at /docs and warn-logged on every emit
+- Fix: Appendix A stated wrong octave names for the play-surface trigger-note defaults (36..43 is C1..G1, not C2..G2)
+- Fix: the manual stated wrong MIDI Learn windows (it's 10 s in the filter/mapping panel, 30 s in the CC-binding popups) and carried four stale section cross-references
 - Fix: the manual PDF silently dropped Appendix E (REST & SSE API) — the build's file glob was never widened past appendix D
 - Fix: manual PDF screenshots could drift past the next section heading and appear under the wrong plugin (the intended per-section float barrier was never actually loaded)
-
-
-2026-07-05 — Version 6.0.0a1
-
-The hub speaks MIDI 2.0. Full 32-bit controller resolution flows end
-to end — through filters, mappings, plugin CC automation and the
-hub's own generators — MIDI 2.0 devices are modelled from their UMP
-endpoint descriptions, MIDI-CI asks connected gear who it is, and the
-monitor shows it all at real resolution. MIDI 1.0 gear keeps behaving
-byte-for-byte as before, and on kernels without MIDI 2.0 support
-(all stock Raspberry Pi OS kernels today) the hub simply runs as it
-always did. Testable without any MIDI 2.0 hardware via the bundled
-virtual synth.
-
-- Fix: pitch bend over Network MIDI and Bluetooth MIDI was shifted by half its range (center played as minimum bend) — ALSA's signed convention was never converted to the unsigned wire form
-- Added: MIDI 2.0 groundwork — the hub now detects at startup whether the kernel and ALSA support UMP/MIDI 2.0 and reports it in /api/system (all current Raspberry Pi OS kernels: not yet)
-- Added: MIDI 2.0 devices are modelled from their UMP endpoint description — named function blocks become the device's ports in the matrix; /api/devices carries the capability info
-- Added: per-device "force MIDI 1.0" escape hatch (config midi2.force_midi1 + device action API) for devices that misbehave under MIDI 2.0
-- Added: the MIDI monitor shows MIDI 2.0 sources at full resolution — fractional 0-127 values (vel=100.53) and typed RPN/NRPN/Per-Note rows; MIDI 1.0 devices display unchanged
-- Added: "2.0" badge on MIDI 2.0-capable devices (matrix row headers + rack faceplates) and a MIDI 2.0 card in device detail with endpoint info and a Use-MIDI-2.0 toggle
-- Added: filtered/mapped connections carry full MIDI 2.0 resolution end-to-end (32-bit values through filters and mappings; MIDI 1.0 devices see byte-identical values as before)
-- Added: "MIDI 2.0" message-type filter toggle (gates per-note messages); mapping value fields accept fractional values like 63.5
-- Added: plugin CC automation follows MIDI 2.0 controllers at full 32-bit resolution; new "fine" parameters hold fractional values (CC LFO Depth/Center first)
-- Added: scripts/fake_midi2_synth.py — a virtual MIDI 2.0 device for testing every 2.0 feature without 2.0 hardware
-- Added: CC LFO emits its waveform at full 32-bit resolution to MIDI 2.0 destinations (stepless sweeps); MIDI 1.0 destinations receive the identical stepped values as before
-- Added: MIDI-CI discovery — the hub asks connected devices who they are (manufacturer/model/version + capabilities, incl. Property-Exchange friendly names) and shows it in device detail; works over MIDI 1.0/DIN links too; Identify button + midi2.ci_enabled/ci_disabled opt-outs
-- Fix: SysEx transmission was broken (wrong ALSA variable-length flag since the beginning) — affected the SysEx Sender plugin; found and fixed by the MIDI-CI work
-- Added: CC Smoother, Velocity Curve, Velocity Equalizer and Pitch CC handle MIDI 2.0 resolution end to end (stepless glides, interpolated curves, preserved velocity gradations); MIDI 1.0 output stays byte-identical
-- Added: the hub's own plugins count as hi-res sources in the MIDI monitor — a CC LFO sweep displays fractionally (51.61) instead of as integer steps
 
 
 2026-07-01 — Version 5.2.0
