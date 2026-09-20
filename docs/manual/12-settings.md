@@ -154,12 +154,15 @@ the first time the unit is used outside a personal home.
 ### AP radio
 
 - **Band** — **2.4 GHz** (default) works on every supported Pi with
-  the longest range, but shares the combo-chip radio with Bluetooth
-  and can disrupt BLE-MIDI on Pi 3-class boards (chapter 10,
-  *Limits*). **5 GHz** stops that competition — the fix for flaky
-  BLE-MIDI on a 5 GHz-capable Pi (3B+, 4, 5) — but has shorter
-  range and needs a 5 GHz-capable phone. Greyed out on radios that
-  can't do it (Pi 3B, Zero 2 W).
+  the longest range. On a Pi 4 or 5, WiFi and Bluetooth use
+  separate radios and coexist cleanly; **5 GHz** is even tidier —
+  it leaves 2.4 GHz entirely to Bluetooth, so there is no
+  interference at all — but has shorter range and needs a
+  5 GHz-capable phone. On Pi 3-class boards (3B+, Zero 2 W)
+  Bluetooth and WiFi share one radio, so a 2.4 GHz AP can disrupt
+  BLE-MIDI (chapter 10, *Limits*); there, 5 GHz stops that
+  competition. Greyed out on radios that can't do it (Pi 3B,
+  Zero 2 W).
 - **Country** — the regulatory domain. **Auto-detect** uses the
   Pi's kernel regdomain (fallback DE). Must match where the Pi is
   used; **required for 5 GHz**.

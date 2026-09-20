@@ -170,7 +170,7 @@ The shipped **[User Manual](https://github.com/wamdam/raspimidihub/releases/late
 
 ### Requirements
 
-- Raspberry Pi 3B+, 4B, 5, or Zero 2 W
+- Raspberry Pi 4B or 5 (recommended) -- 3B+ and Zero 2 W also work, but their USB 2.0 buses may drop notes under load
 - microSD card (4 GB+)
 - USB MIDI devices
 - **Internet on first boot** — ethernet, USB-tethered phone, or WiFi credentials set in the Pi Imager wizard
@@ -351,10 +351,10 @@ Tests run without ALSA hardware (`RASPIMIDIHUB_TEST_MODE=1`). No Raspberry Pi re
 
 | Raspberry Pi Model | USB Ports | Recommended Max Devices | Notes |
 |--------------------|-----------|-------------------------|-------|
-| Pi Zero 2 W | 1 (via OTG + hub) | 3-4 | Single USB bus |
-| Pi 3B+ | 4 | 4 | Shared USB/Ethernet bus |
-| Pi 4B | 4 (2x USB 3.0) | 8+ | Recommended |
-| Pi 5 | 4 (2x USB 3.0) | 8+ | Best performance |
+| Pi Zero 2 W | 1 (via OTG + hub) | 3-4 | Works; single USB 2.0 bus may drop notes under load |
+| Pi 3B+ | 4 | 4 | Works; USB 2.0 bus shared with Ethernet may drop notes under load |
+| Pi 4B | 4 (2x USB 3.0) | 8+ | **Recommended** |
+| Pi 5 | 4 (2x USB 3.0) | 8+ | **Recommended**, best performance |
 
 ---
 
